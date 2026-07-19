@@ -116,7 +116,8 @@ function xLabel(t) {
   return ["1w", "1m", "6m"].includes(state.range) ? fmtDayMon.format(d) : fmtMonYr.format(d);
 }
 function tooltipDate(t) {
-  if (state.range === "1d") return `${fmtFull.format(t)} · ${fmtTime.format(t)}`;
+  // numeric timestamps (1J intraday, 1S/1M hourly) carry a meaningful time of day
+  if (typeof t === "number") return `${fmtFull.format(t)} · ${fmtTime.format(t)}`;
   return fmtFull.format(new Date(t + "T12:00:00Z"));
 }
 
@@ -277,7 +278,10 @@ function renderChartTable() {
   for (const i of idxs) {
     const p = points[i];
     const row = el("tr");
-    row.append(el("td", "left", state.range === "1d" ? fmtTime.format(p.t) : fmtDate.format(new Date(p.t + "T12:00:00Z"))));
+    const label = typeof p.t === "number"
+      ? (state.range === "1d" ? fmtTime.format(p.t) : `${fmtDate.format(p.t)} ${fmtTime.format(p.t)}`)
+      : fmtDate.format(new Date(p.t + "T12:00:00Z"));
+    row.append(el("td", "left", label));
     row.append(el("td", signCls(p.pct), pct(p.pct)));
     row.append(el("td", null, eur(p.value)));
     tbody.append(row);
@@ -466,6 +470,20 @@ function assetRangePoints(data, key) {
     if (!intra?.points?.length || !intra.prevClose) return null;
     return intra.points.map(([t, c]) => ({ t, pct: (c / intra.prevClose - 1) * 100, price: c }));
   }
+  // 1S / 1M: hourly bars (one point per market hour; ~4 per day on 1M)
+  if ((key === "w1" || key === "m1") && data.hourly?.length >= 2) {
+    const endT = data.hourly[data.hourly.length - 1][0];
+    const startT = endT - (key === "w1" ? 7 : 30) * 86400000;
+    let arr = data.hourly.filter(([t]) => t >= startT);
+    if (key === "m1") {
+      const n = arr.length;
+      arr = arr.filter((_, i) => i === 0 || (n - 1 - i) % 4 === 0);
+    }
+    if (arr.length >= 2 && arr[0][1] > 0) {
+      const base = arr[0][1];
+      return arr.map(([t, v]) => ({ t, pct: (v / base - 1) * 100, price: v }));
+    }
+  }
   const daily = data.daily || [];
   if (daily.length < 2) return null;
   const endMs = Date.parse(daily[daily.length - 1][0]);
@@ -510,9 +528,11 @@ function renderMiniChart(wrap, svg, tip, pts, rangeKey) {
   sv("path", { d, fill: "none", stroke: "var(--accent)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
   sv("circle", { cx: x(n - 1), cy: y(pts[n - 1].pct), r: 3, fill: "var(--accent)" }, svg);
 
-  const xl = (t) => rangeKey === "d1"
-    ? fmtTime.format(t)
-    : (["y3", "y1"].includes(rangeKey) ? fmtMonYr : fmtDayMon).format(new Date(t + "T12:00:00Z"));
+  const xl = (t) => {
+    if (rangeKey === "d1") return fmtTime.format(t);
+    const d = new Date(typeof t === "number" ? t : t + "T12:00:00Z");
+    return (["y3", "y1"].includes(rangeKey) ? fmtMonYr : fmtDayMon).format(d);
+  };
   const l1 = sv("text", { x: padL, y: H - 4, fill: "var(--muted)", "font-size": 9.5, "font-family": "inherit" }, svg);
   l1.textContent = xl(pts[0].t);
   const l2 = sv("text", { x: W - padR, y: H - 4, fill: "var(--muted)", "font-size": 9.5, "text-anchor": "end", "font-family": "inherit" }, svg);
@@ -532,9 +552,12 @@ function renderMiniChart(wrap, svg, tip, pts, rangeKey) {
     vline.setAttribute("x2", cx);
     dot.setAttribute("cx", cx);
     dot.setAttribute("cy", cy);
+    const dateLabel = typeof p.t === "number"
+      ? (rangeKey === "d1" ? fmtTime.format(p.t) : `${fmtDate.format(p.t)} ${fmtTime.format(p.t)}`)
+      : fmtDate.format(new Date(p.t + "T12:00:00Z"));
     tip.replaceChildren(
       el("div", "tt-pct " + signCls(p.pct), pct(p.pct)),
-      el("div", "tt-date", rangeKey === "d1" ? fmtTime.format(p.t) : fmtDate.format(new Date(p.t + "T12:00:00Z"))),
+      el("div", "tt-date", dateLabel),
       el("div", "tt-value", price(p.price)),
     );
     tip.hidden = false;
