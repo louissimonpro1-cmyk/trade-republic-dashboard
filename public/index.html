@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0d0d0d">
+  <title>Mon portefeuille · Trade Republic</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Portefeuille">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main class="wrap">
+  <header class="page-head">
+    <div>
+      <h1>Mon portefeuille</h1>
+      <p class="sub">Compte titre Trade Republic · historique Google Sheet en direct</p>
+    </div>
+    <div class="updated" id="updated"></div>
+  </header>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p>Récupération des cours…<br><span class="hint">Première visite : environ 20 secondes, ensuite instantané.</span></p>
+  </div>
+
+  <section class="hero card" id="heroCard" hidden>
+    <p class="hero-label">Valeur des positions</p>
+    <div class="hero-row">
+      <span class="hero-value num" id="heroValue"></span>
+      <span class="chip" id="heroDelta" hidden></span>
+    </div>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section class="card chart-card" id="chartCard" hidden>
+    <div class="chart-head">
+      <div class="period-perf">
+        <span id="periodPct"></span>
+        <span class="period-sub" id="periodSub">sur la période</span>
+      </div>
+      <div class="ranges" id="ranges" role="tablist" aria-label="Période"></div>
+    </div>
+    <div class="chart-wrap" id="chartWrap">
+      <svg id="chartSvg" role="img" aria-label="Performance du portefeuille"></svg>
+      <div class="tooltip" id="tooltip" hidden></div>
+    </div>
+    <details class="chart-table">
+      <summary>Voir les données en tableau</summary>
+      <div class="scroll-x"><table id="chartTable" class="num"></table></div>
+    </details>
+  </section>
+
+  <section class="card" id="positionsCard" hidden>
+    <details class="section-fold" id="posFold" open>
+      <summary><h2>Positions <span class="count" id="posCount"></span></h2></summary>
+      <div class="scroll-x"><table class="data-table" id="posTable"></table></div>
+      <div class="cards-list" id="posCards"></div>
+    </details>
+  </section>
+
+  <section class="card" id="archivesCard" hidden>
+    <details class="section-fold" id="arcFold">
+      <summary><h2>Archives <span class="count" id="arcCount"></span></h2></summary>
+      <p class="hint">Positions entièrement soldées : bilan des performances réalisées.</p>
+      <div class="scroll-x"><table class="data-table" id="arcTable"></table></div>
+      <div class="cards-list" id="arcCards"></div>
+    </details>
+  </section>
+
+  <footer class="foot">
+    Historique : Google Sheet (lecture en direct) · Cours : Yahoo Finance · Logos : Trade Republic<br>
+    Actualisation automatique toutes les 60 secondes
+  </footer>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

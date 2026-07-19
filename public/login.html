@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0d0d0d">
+  <title>Connexion · Mon portefeuille</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main class="login-wrap">
+  <form class="card login-card" id="form">
+    <img src="/icon-192.png" alt="" class="login-logo">
+    <h1>Mon portefeuille</h1>
+    <p class="hint">Entre le mot de passe pour accéder au dashboard.</p>
+    <input type="password" id="pw" name="password" autocomplete="current-password"
+           placeholder="Mot de passe" autofocus required>
+    <button type="submit" id="btn">Entrer</button>
+    <p class="login-error" id="err" hidden></p>
+  </form>
+</main>
+<script>
+"use strict";
+const form = document.getElementById("form");
+const err = document.getElementById("err");
+const btn = document.getElementById("btn");
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  btn.disabled = true;
+  err.hidden = true;
+  try {
+    const r = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: document.getElementById("pw").value }),
+    });
+    if (r.ok) { location.href = "/"; return; }
+    const body = await r.json().catch(() => ({}));
+    err.textContent = body.error || "Erreur de connexion.";
+    err.hidden = false;
+  } catch {
+    err.textContent = "Serveur injoignable.";
+    err.hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
