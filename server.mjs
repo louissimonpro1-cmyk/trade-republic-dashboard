@@ -7,7 +7,7 @@ import os from "node:os";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getDashboard, getPerf, getLogo, PERF_RANGES } from "./lib/service.mjs";
+import { getDashboard, getPerf, getLogo, getAssetSeries, PERF_RANGES } from "./lib/service.mjs";
 import { AUTH_ENABLED, isAuthedCookie, handleLogin, clearCookie } from "./lib/auth.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -64,6 +64,11 @@ const server = http.createServer(async (req, res) => {
       const range = url.searchParams.get("range") || "max";
       if (!PERF_RANGES.includes(range)) return json(res, 400, { error: "range invalide" });
       return json(res, 200, await getPerf(range));
+    }
+    if (url.pathname === "/api/asset-perf") {
+      const isin = url.searchParams.get("isin") || "";
+      if (!/^[A-Z0-9]{12}$/.test(isin)) return json(res, 400, { error: "isin invalide" });
+      return json(res, 200, await getAssetSeries(isin));
     }
     const logo = url.pathname.match(/^\/api\/logo\/([A-Z0-9]{12})$/);
     if (logo) {

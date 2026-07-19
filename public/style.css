@@ -284,7 +284,21 @@ details.pcard[open] .pcard-chev { transform: rotate(90deg); }
 .pp-fold > summary::after { content: " ▸"; }
 .pp-fold[open] > summary::after { content: " ▾"; }
 .pcard-perf { display: flex; gap: 5px; margin-top: 8px; }
-.pp-cell { flex: 1; background: var(--wash); border-radius: 7px; padding: 4px 2px; text-align: center; min-width: 0; }
+.pp-cell {
+  flex: 1; background: var(--wash); border: 1px solid transparent; border-radius: 7px;
+  padding: 4px 2px; text-align: center; min-width: 0;
+  font: inherit; color: inherit; cursor: pointer;
+}
+.pp-cell:disabled { cursor: default; opacity: 0.55; }
+.pp-cell[aria-selected="true"] { border-color: var(--baseline); background: var(--surface); }
+
+/* per-asset mini chart inside the fold */
+.asset-chart-box { margin-top: 8px; }
+.mini-chart-wrap { position: relative; touch-action: pan-y; }
+.mini-chart-wrap svg { display: block; width: 100%; }
+.mini-note { color: var(--muted); font-size: 11px; margin: 4px 0 6px; }
+.mini-tip { padding: 5px 9px; }
+.mini-tip .tt-pct { font-size: 13px; }
 .pp-lbl { color: var(--muted); font-size: 8.5px; letter-spacing: 0.04em; white-space: nowrap; }
 .pp-val { font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 

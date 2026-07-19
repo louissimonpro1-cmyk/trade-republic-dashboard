@@ -431,16 +431,173 @@ function kv(label, value, cls, align) {
   return d;
 }
 
+// the 6 period pills double as range buttons for the per-asset mini chart
 function miniPerfRow(o) {
-  if (!o || !Object.values(o).some((v) => v != null)) return null;
   const row = el("div", "pcard-perf");
+  const buttons = new Map();
   for (const [lbl, k] of [["3 A", "y3"], ["1 A", "y1"], ["6 M", "m6"], ["1 M", "m1"], ["1 S", "w1"], ["1 J", "d1"]]) {
-    const cell = el("div", "pp-cell");
+    const cell = el("button", "pp-cell");
+    cell.type = "button";
+    if (o?.[k] == null) cell.disabled = true;
     cell.append(el("div", "pp-lbl", lbl));
-    cell.append(el("div", "pp-val " + signCls(o[k]), o[k] == null ? "—" : pct(o[k], 1)));
+    cell.append(el("div", "pp-val " + signCls(o?.[k]), o?.[k] == null ? "—" : pct(o[k], 1)));
     row.append(cell);
+    buttons.set(k, cell);
   }
-  return row;
+  return { row, buttons };
+}
+
+// ---------- per-asset mini performance chart --------------------------------
+const assetSeriesMem = new Map(); // isin -> promise of /api/asset-perf payload
+function fetchAssetSeries(isin) {
+  if (!assetSeriesMem.has(isin)) {
+    assetSeriesMem.set(isin, api(`/api/asset-perf?isin=${isin}`).catch((e) => {
+      assetSeriesMem.delete(isin);
+      throw e;
+    }));
+  }
+  return assetSeriesMem.get(isin);
+}
+
+const ASSET_RANGE_DAYS = { y3: 3 * 365, y1: 365, m6: 182, m1: 30, w1: 7 };
+function assetRangePoints(data, key) {
+  if (key === "d1") {
+    const intra = data.intraday;
+    if (!intra?.points?.length || !intra.prevClose) return null;
+    return intra.points.map(([t, c]) => ({ t, pct: (c / intra.prevClose - 1) * 100, price: c }));
+  }
+  const daily = data.daily || [];
+  if (daily.length < 2) return null;
+  const endMs = Date.parse(daily[daily.length - 1][0]);
+  const startKey = new Date(endMs - ASSET_RANGE_DAYS[key] * 86400000).toISOString().slice(0, 10);
+  const arr = daily.filter(([d]) => d >= startKey);
+  if (arr.length < 2 || !(arr[0][1] > 0)) return null;
+  const base = arr[0][1];
+  return arr.map(([d, v]) => ({ t: d, pct: (v / base - 1) * 100, price: v }));
+}
+
+let miniGradSeq = 0;
+function renderMiniChart(wrap, svg, tip, pts, rangeKey) {
+  svg.replaceChildren();
+  tip.hidden = true;
+  const W = wrap.clientWidth || 300, H = 120;
+  svg.setAttribute("width", W);
+  svg.setAttribute("height", H);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const padL = 2, padR = 2, padT = 10, padB = 16;
+  const n = pts.length;
+  const ys = pts.map((p) => p.pct);
+  let ymin = Math.min(...ys), ymax = Math.max(...ys);
+  if (ymax - ymin < 0.2) { ymin -= 0.25; ymax += 0.25; }
+  const padY = (ymax - ymin) * 0.1;
+  ymin -= padY; ymax += padY;
+  const x = (i) => padL + (i * (W - padL - padR)) / (n - 1);
+  const y = (v) => padT + ((ymax - v) * (H - padT - padB)) / (ymax - ymin);
+  wrap.style.setProperty("--accent", pts[n - 1].pct >= 0 ? "var(--up)" : "var(--down)");
+
+  const defs = sv("defs", {}, svg);
+  const gid = `miniGrad${++miniGradSeq}`;
+  const grad = sv("linearGradient", { id: gid, x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+  sv("stop", { offset: 0, style: "stop-color: var(--accent); stop-opacity: 0.18" }, grad);
+  sv("stop", { offset: 1, style: "stop-color: var(--accent); stop-opacity: 0" }, grad);
+
+  if (ymin < 0 && ymax > 0) {
+    sv("line", { x1: padL, x2: W - padR, y1: y(0), y2: y(0), stroke: "var(--baseline)", "stroke-width": 1, "stroke-dasharray": "4 4" }, svg);
+  }
+  let d = "";
+  for (let i = 0; i < n; i++) d += `${i ? "L" : "M"}${x(i).toFixed(2)},${y(pts[i].pct).toFixed(2)}`;
+  sv("path", { d: d + `L${x(n - 1).toFixed(2)},${H - padB}L${x(0).toFixed(2)},${H - padB}Z`, fill: `url(#${gid})` }, svg);
+  sv("path", { d, fill: "none", stroke: "var(--accent)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+  sv("circle", { cx: x(n - 1), cy: y(pts[n - 1].pct), r: 3, fill: "var(--accent)" }, svg);
+
+  const xl = (t) => rangeKey === "d1"
+    ? fmtTime.format(t)
+    : (["y3", "y1"].includes(rangeKey) ? fmtMonYr : fmtDayMon).format(new Date(t + "T12:00:00Z"));
+  const l1 = sv("text", { x: padL, y: H - 4, fill: "var(--muted)", "font-size": 9.5, "font-family": "inherit" }, svg);
+  l1.textContent = xl(pts[0].t);
+  const l2 = sv("text", { x: W - padR, y: H - 4, fill: "var(--muted)", "font-size": 9.5, "text-anchor": "end", "font-family": "inherit" }, svg);
+  l2.textContent = xl(pts[n - 1].t);
+
+  const cross = sv("g", { visibility: "hidden" }, svg);
+  const vline = sv("line", { y1: padT, y2: H - padB, stroke: "var(--baseline)", "stroke-width": 1, "stroke-dasharray": "3 3" }, cross);
+  const dot = sv("circle", { r: 3.5, fill: "var(--accent)", stroke: "var(--surface)", "stroke-width": 2 }, cross);
+
+  const move = (e) => {
+    const rect = svg.getBoundingClientRect();
+    const step = (W - padL - padR) / (n - 1);
+    const idx = Math.max(0, Math.min(n - 1, Math.round((e.clientX - rect.left - padL) / step)));
+    const p = pts[idx], cx = x(idx), cy = y(p.pct);
+    cross.setAttribute("visibility", "visible");
+    vline.setAttribute("x1", cx);
+    vline.setAttribute("x2", cx);
+    dot.setAttribute("cx", cx);
+    dot.setAttribute("cy", cy);
+    tip.replaceChildren(
+      el("div", "tt-pct " + signCls(p.pct), pct(p.pct)),
+      el("div", "tt-date", rangeKey === "d1" ? fmtTime.format(p.t) : fmtDate.format(new Date(p.t + "T12:00:00Z"))),
+      el("div", "tt-value", price(p.price)),
+    );
+    tip.hidden = false;
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = `${Math.max(2, Math.min(W - tw - 2, cx - tw / 2))}px`;
+    let top = cy - th - 12;
+    if (top < 0) top = cy + 12;
+    tip.style.top = `${top}px`;
+  };
+  svg.onpointermove = move;
+  svg.onpointerdown = move;
+  svg.onpointerleave = () => { cross.setAttribute("visibility", "hidden"); tip.hidden = true; };
+}
+
+function assetPerfFold(p) {
+  const o = p.ownPerf || {};
+  if (!Object.values(o).some((v) => v != null)) return null; // no market data (warrants)
+  const fold = el("details", "pp-fold");
+  fold.append(el("summary", null, "Performance du titre"));
+  const box = el("div", "asset-chart-box");
+  const wrap = el("div", "mini-chart-wrap");
+  const svg = sv("svg", {});
+  const tip = el("div", "tooltip mini-tip");
+  tip.hidden = true;
+  wrap.append(svg, tip);
+  const note = el("div", "mini-note");
+  note.hidden = true;
+  const { row, buttons } = miniPerfRow(o);
+  box.append(wrap, note, row);
+  fold.append(box);
+
+  let selected = ["y1", "m6", "m1", "y3", "w1", "d1"].find((k) => o[k] != null);
+  let data = null;
+  const render = () => {
+    for (const [k, b] of buttons) b.setAttribute("aria-selected", String(k === selected));
+    if (!data) return;
+    const pts = assetRangePoints(data, selected);
+    if (!pts) {
+      svg.replaceChildren();
+      svg.setAttribute("height", 0);
+      note.textContent = "Pas de données de cours pour cette période.";
+      note.hidden = false;
+      return;
+    }
+    note.hidden = true;
+    renderMiniChart(wrap, svg, tip, pts, selected);
+  };
+  for (const [k, b] of buttons) {
+    b.addEventListener("click", () => { selected = k; render(); });
+  }
+  fold.addEventListener("toggle", async () => {
+    if (!fold.open) return;
+    if (data) { render(); return; }
+    note.textContent = "Chargement de la courbe…";
+    note.hidden = false;
+    try {
+      data = await fetchAssetSeries(p.isin);
+      render();
+    } catch {
+      note.textContent = "Courbe indisponible.";
+    }
+  });
+  return fold;
 }
 
 function cardHead(a, rightText, rightCls) {
@@ -481,14 +638,7 @@ function renderPositionCards(list) {
       p.lastSellPrice == null ? "—" : `${pct(p.vsLastSellPct)}\n${priceS(p.vsLastSellEur)}`,
       p.lastSellPrice == null ? null : signCls(p.vsLastSellPct), "kv-r"));
 
-    let perfFold = null;
-    const perf = miniPerfRow(p.ownPerf);
-    if (perf) {
-      perfFold = el("details", "pp-fold");
-      perfFold.append(el("summary", null, "Performance du titre"));
-      perfFold.append(perf);
-    }
-    box.append(makeCard(cardHead(p, eur(p.valueEur)), sub, [grid, perfFold]));
+    box.append(makeCard(cardHead(p, eur(p.valueEur)), sub, [grid, assetPerfFold(p)]));
   }
 }
 
