@@ -67,7 +67,8 @@ function renderHero() {
   if (t.dayChangePct != null) {
     chip.hidden = false;
     chip.className = "chip " + signCls(t.dayChangeEur);
-    chip.textContent = `${t.dayChangeEur >= 0 ? "▲" : "▼"} ${eurS(t.dayChangeEur)} · ${pct(t.dayChangePct)} aujourd’hui`;
+    const label = t.sessionDate && t.sessionDate !== state.dashboard.today ? "dernière séance" : "aujourd’hui";
+    chip.textContent = `${t.dayChangeEur >= 0 ? "▲" : "▼"} ${eurS(t.dayChangeEur)} · ${pct(t.dayChangePct)} ${label}`;
   } else chip.hidden = true;
 
   const tiles = $("tiles");
@@ -468,7 +469,10 @@ function assetRangePoints(data, key) {
   if (key === "d1") {
     const intra = data.intraday;
     if (!intra?.points?.length || !intra.prevClose) return null;
-    return intra.points.map(([t, c]) => ({ t, pct: (c / intra.prevClose - 1) * 100, price: c }));
+    const pts = intra.points.map(([t, c]) => ({ t, pct: (c / intra.prevClose - 1) * 100, price: c }));
+    // anchor at 0%: previous close first, the opening gap becomes the first move
+    pts.unshift({ t: pts[0].t - 300000, pct: 0, price: intra.prevClose });
+    return pts;
   }
   // 1S / 1M: hourly bars (one point per market hour; ~4 per day on 1M)
   if ((key === "w1" || key === "m1") && data.hourly?.length >= 2) {
