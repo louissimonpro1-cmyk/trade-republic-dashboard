@@ -443,10 +443,11 @@ function renderArchives() {
 }
 
 // ---------- mobile cards (replace the tables under 680px, via CSS) ----------
-function kv(label, value, cls, align) {
+function kv(label, value, cls, align, sub) {
   const d = el("div", "kv" + (align ? " " + align : ""));
   d.append(el("div", "kv-l", label));
   d.append(el("div", "kv-v" + (cls ? " " + cls : ""), value));
+  if (sub) d.append(el("div", "kv-sub", sub));
   return d;
 }
 
@@ -666,13 +667,14 @@ function assetPerfFold(p) {
   return fold;
 }
 
-function cardHead(a, rightText, rightCls) {
+function cardHead(a, rightText, rightCls, dayPct) {
   const head = el("div", "pcard-head");
   head.append(logoEl(a));
   const name = el("div", "pcard-name", a.name);
   if (a.priceSource === "transaction") name.append(approxBadge());
   head.append(name);
   head.append(el("div", "pcard-value " + (rightCls || ""), rightText));
+  if (dayPct != null) head.append(el("span", "pcard-day " + signCls(dayPct), pct(dayPct, 1)));
   head.append(el("span", "pcard-chev", "▸"));
   return head;
 }
@@ -699,12 +701,13 @@ function renderPositionCards(list) {
 
     const grid = el("div", "pcard-grid g3");
     grid.append(kv("PRU", price(p.avgBuy)));
-    grid.append(kv("Dernière vente", p.lastSellPrice == null ? "—" : price(p.lastSellPrice), null, "kv-c"));
+    grid.append(kv("Dernière vente", p.lastSellPrice == null ? "—" : price(p.lastSellPrice), null, "kv-c",
+      p.lastSellDate ? fmtDate.format(new Date(p.lastSellDate + "T12:00:00Z")) : null));
     grid.append(kv("Depuis la vente",
       p.lastSellPrice == null ? "—" : `${pct(p.vsLastSellPct)}\n${priceS(p.vsLastSellEur)}`,
       p.lastSellPrice == null ? null : signCls(p.vsLastSellPct), "kv-r"));
 
-    box.append(makeCard(cardHead(p, eur(p.valueEur)), sub, [grid, assetPerfFold(p)]));
+    box.append(makeCard(cardHead(p, eur(p.valueEur), null, p.ownPerf?.d1), sub, [grid, assetPerfFold(p)]));
   }
 }
 
