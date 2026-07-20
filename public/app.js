@@ -181,12 +181,26 @@ function renderChart() {
     }, svg);
   }
 
-  // area + line
-  let dLine = "";
-  for (let i = 0; i < n; i++) dLine += `${i ? "L" : "M"}${x(i).toFixed(2)},${y(points[i].pct).toFixed(2)}`;
+  // area + line (on 1J, the previous session's tail is drawn dimmed, with a separator)
+  const seg = (from, to) => {
+    let s = "";
+    for (let i = from; i <= to; i++) s += `${i === from ? "M" : "L"}${x(i).toFixed(2)},${y(points[i].pct).toFixed(2)}`;
+    return s;
+  };
+  const dLine = seg(0, n - 1);
   const dArea = dLine + `L${x(n - 1).toFixed(2)},${H - padB}L${x(0).toFixed(2)},${H - padB}Z`;
   sv("path", { d: dArea, fill: "url(#areaGrad)" }, svg);
-  sv("path", { d: dLine, fill: "none", stroke: "var(--accent)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+  const boundaryT = state.range === "1d" ? state.perf?.sessionStart : null;
+  let bIdx = boundaryT != null ? points.findIndex((pt) => pt.t >= boundaryT) : -1;
+  if (bIdx <= 0) bIdx = -1;
+  const lineAttrs = { fill: "none", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" };
+  if (bIdx > 0) {
+    sv("path", { d: seg(0, bIdx), stroke: "var(--accent)", "stroke-opacity": 0.4, ...lineAttrs }, svg);
+    sv("path", { d: seg(bIdx, n - 1), stroke: "var(--accent)", ...lineAttrs }, svg);
+    sv("line", { x1: x(bIdx), x2: x(bIdx), y1: padT, y2: H - padB, stroke: "var(--baseline)", "stroke-width": 1, "stroke-dasharray": "2 4" }, svg);
+  } else {
+    sv("path", { d: dLine, stroke: "var(--accent)", ...lineAttrs }, svg);
+  }
   sv("circle", { cx: x(n - 1), cy: y(last), r: 3.5, fill: "var(--accent)" }, svg);
 
   // x labels
@@ -469,9 +483,21 @@ function assetRangePoints(data, key) {
   if (key === "d1") {
     const intra = data.intraday;
     if (!intra?.points?.length || !intra.prevClose) return null;
-    const pts = intra.points.map(([t, c]) => ({ t, pct: (c / intra.prevClose - 1) * 100, price: c }));
-    // anchor at 0%: previous close first, the opening gap becomes the first move
-    pts.unshift({ t: pts[0].t - 300000, pct: 0, price: intra.prevClose });
+    // rolling window: previous session from the current clock time, whole session kept
+    let winStart = intra.sessionStart ?? -Infinity;
+    if (intra.prevSessionDate && intra.sessionStart != null) {
+      const dayDiff = Math.max(1, Math.round((Date.parse(intra.sessionDate) - Date.parse(intra.prevSessionDate)) / 86400000));
+      winStart = Math.min(intra.sessionStart, Date.now() - dayDiff * 86400000);
+    }
+    const pts = intra.points
+      .filter(([t]) => t >= winStart)
+      .map(([t, c]) => ({ t, pct: (c / intra.prevClose - 1) * 100, price: c }));
+    if (!pts.length) return null;
+    pts.sessionStartT = intra.sessionStart;
+    // anchor at 0% only when no previous-session tail is shown
+    if (intra.sessionStart == null || pts[0].t >= intra.sessionStart) {
+      pts.unshift({ t: pts[0].t - 300000, pct: 0, price: intra.prevClose });
+    }
     return pts;
   }
   // 1S / 1M: hourly bars (one point per market hour; ~4 per day on 1M)
@@ -526,10 +552,23 @@ function renderMiniChart(wrap, svg, tip, pts, rangeKey) {
   if (ymin < 0 && ymax > 0) {
     sv("line", { x1: padL, x2: W - padR, y1: y(0), y2: y(0), stroke: "var(--baseline)", "stroke-width": 1, "stroke-dasharray": "4 4" }, svg);
   }
-  let d = "";
-  for (let i = 0; i < n; i++) d += `${i ? "L" : "M"}${x(i).toFixed(2)},${y(pts[i].pct).toFixed(2)}`;
+  const seg = (from, to) => {
+    let s = "";
+    for (let i = from; i <= to; i++) s += `${i === from ? "M" : "L"}${x(i).toFixed(2)},${y(pts[i].pct).toFixed(2)}`;
+    return s;
+  };
+  const d = seg(0, n - 1);
   sv("path", { d: d + `L${x(n - 1).toFixed(2)},${H - padB}L${x(0).toFixed(2)},${H - padB}Z`, fill: `url(#${gid})` }, svg);
-  sv("path", { d, fill: "none", stroke: "var(--accent)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+  const lineAttrs = { fill: "none", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" };
+  let bIdx = pts.sessionStartT != null ? pts.findIndex((p) => p.t >= pts.sessionStartT) : -1;
+  if (bIdx <= 0) bIdx = -1;
+  if (bIdx > 0) {
+    sv("path", { d: seg(0, bIdx), stroke: "var(--accent)", "stroke-opacity": 0.4, ...lineAttrs }, svg);
+    sv("path", { d: seg(bIdx, n - 1), stroke: "var(--accent)", ...lineAttrs }, svg);
+    sv("line", { x1: x(bIdx), x2: x(bIdx), y1: padT, y2: H - padB, stroke: "var(--baseline)", "stroke-width": 1, "stroke-dasharray": "2 4" }, svg);
+  } else {
+    sv("path", { d, stroke: "var(--accent)", ...lineAttrs }, svg);
+  }
   sv("circle", { cx: x(n - 1), cy: y(pts[n - 1].pct), r: 3, fill: "var(--accent)" }, svg);
 
   const xl = (t) => {
