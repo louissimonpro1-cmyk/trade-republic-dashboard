@@ -707,7 +707,13 @@ function renderPositionCards(list) {
       p.lastSellPrice == null ? "—" : `${pct(p.vsLastSellPct)}\n${priceS(p.vsLastSellEur)}`,
       p.lastSellPrice == null ? null : signCls(p.vsLastSellPct), "kv-r"));
 
-    box.append(makeCard(cardHead(p, eur(p.valueEur), null, p.ownPerf?.d1), sub, [grid, assetPerfFold(p)]));
+    // realized P&L on this asset (money actually banked by selling shares so far)
+    const realized = el("div", "pcard-realized");
+    realized.append(el("span", "pr-label", "P&L réalisé sur ventes"));
+    const hasSold = p.lastSellPrice != null;
+    realized.append(el("span", "pr-value " + (hasSold ? signCls(p.realized) : "na"), hasSold ? eurS(p.realized) : "—"));
+
+    box.append(makeCard(cardHead(p, eur(p.valueEur), null, p.ownPerf?.d1), sub, [grid, realized, assetPerfFold(p)]));
   }
 }
 
